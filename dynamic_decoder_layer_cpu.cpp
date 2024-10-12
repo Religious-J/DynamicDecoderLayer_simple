@@ -12,7 +12,6 @@ enum class RepetitionPenaltyType {
 };
 
 #define FLT_MAX		__FLT_MAX__
-#define FLT_MIN		__FLT_MIN__
 
 void cpuInvokeBanBadWords(
     float *logits,
@@ -164,7 +163,7 @@ void cpuInvokeAddBiasEndMask(
         for (int vocab_idx = 0; vocab_idx < vocab_size_padded; vocab_idx++) {
             if (vocab_idx < vocab_size) {
                 if (finish) {
-                    logits[offset + vocab_idx] = (vocab_idx == end_ids[batch_idx]) ? FLT_MAX : FLT_MIN;
+                    logits[offset + vocab_idx] = (vocab_idx == end_ids[batch_idx]) ? FLT_MAX : -FLT_MAX;
                 }
                 else {
                     // possible wrong
@@ -174,7 +173,7 @@ void cpuInvokeAddBiasEndMask(
             }
             // padded part
             else {
-                logits[offset + vocab_idx] = FLT_MIN;
+                logits[offset + vocab_idx] = -FLT_MAX;
             }
         }
     }
@@ -190,14 +189,14 @@ void cpuInvokeAddBiasSoftMax(
     int vocab_size_padded
 ){
     for (int batch_idx = 0; batch_idx < batch_size; batch_idx++) {
-        float max_val = FLT_MIN;
+        float max_val = -FLT_MAX;
         bool finish = finished != nullptr ? finished[batch_idx] : false;
         int offset = batch_idx * vocab_size_padded;
 
         for (int vocab_idx = 0; vocab_idx < vocab_size_padded; vocab_idx++) {
             if (vocab_idx < vocab_size) {
                 if (finish) {
-                    logits[offset + vocab_idx] = (vocab_idx == end_ids[batch_idx]) ? FLT_MAX : FLT_MIN;
+                    logits[offset + vocab_idx] = (vocab_idx == end_ids[batch_idx]) ? FLT_MAX : -FLT_MAX;
                 }
                 else {
                     // possible wrong
@@ -207,7 +206,7 @@ void cpuInvokeAddBiasSoftMax(
             }
             // padded part
             else {
-                logits[offset + vocab_idx] = FLT_MIN;
+                logits[offset + vocab_idx] = -FLT_MAX;
             }
 
             float logit = static_cast<float>(logits[offset + vocab_idx]);
@@ -292,7 +291,7 @@ void cpuInvokeBatchTopKSampling(
 
         // Step 2: Softmax 前处理，找到最大值
         // if cum_log_probs are computed, this operation is already pre-processed
-        float s_max = FLT_MIN;
+        float s_max = -FLT_MAX;
         if (cum_log_probs == nullptr && output_log_probs == nullptr) {
             for (int i = 0; i < k; ++i) {
                 s_max = fmaxf(s_max, topk_vals[i]);
@@ -660,38 +659,38 @@ int main(){
 
     // 3. 调用函数
     cpuCustomTransformerDynamicDecoder(
-        &logits[0][0],          // logits
-        output_ids,                     // output_ids
-        step,                           // step
-        batch_size,                     // batch_size
-        vocab_size,                     // vocab_size
-        vocab_size_padded,              // vocab_size_padded
-        end_ids,                        // end_ids
-        share_words,                    // share_words
-        bad_words_list,                 // bad_words_list
-        bad_words_len,                  // bad_words_len
-        embedding_bias,                 // embedding_bias
-        &temperature,                   // temperature
-        temperature_size,               // temperature_size
-        repetition_penalty,             // repetition_penalty
-        penalty_type,                   // penalty_type
-        sequence_lengths,               // sequence_lengths
-        sequence_limit_length,          // sequence_limit_length
-        max_input_length,               // max_input_length
-        input_length,                   // input_length
-        min_length,                     // min_length
-        max_top_k,                      // max_top_k
-        top_ks,                         // top_ks
-        top_p,                          // top_p
-        top_ps,                         // top_ps
-        cum_log_probs,                  // cum_log_probs
-        output_log_probs,               // output_log_probs
-        stop_words_len,                 // stop_words_len
-        stop_words_list,                // stop_words_list
-        finished,                       // finished
-        finished_sum,                   // finished_sum
-        should_stop,                    // should_stop
-        skip_decode                     // skip_decode
+        &logits[0][0],
+        output_ids,
+        step,
+        batch_size,
+        vocab_size,
+        vocab_size_padded,
+        end_ids,
+        share_words,
+        bad_words_list,
+        bad_words_len,
+        embedding_bias,
+        &temperature,
+        temperature_size,
+        repetition_penalty,
+        penalty_type,
+        sequence_lengths,
+        sequence_limit_length,
+        max_input_length, 
+        input_length,
+        min_length,
+        max_top_k,
+        top_ks,
+        top_p,
+        top_ps,
+        cum_log_probs,
+        output_log_probs,
+        stop_words_len,
+        stop_words_list,
+        finished,
+        finished_sum,
+        should_stop,
+        skip_decode
     );
     
         return 0;
