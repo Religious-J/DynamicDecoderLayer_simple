@@ -6,9 +6,9 @@
 
 
 enum class RepetitionPenaltyType {
-    Additive,        // the presence penalty
-    Multiplicative,  // the repetition penalty
-    None             // No repetition penalty.
+    Additive,                   // the presence penalty
+    Multiplicative,             // the repetition penalty
+    None                        // No repetition penalty.
 };
 
 #define FLT_MAX		__FLT_MAX__
@@ -18,7 +18,7 @@ void cpuInvokeBanBadWords(
     int *output_ids,
     int *bad_words,
     int bad_words_len,
-    bool share_words,         // 不同 batch 是否共享不良单词的标志
+    bool share_words,           // 不同 batch 是否共享不良单词的标志
     int batch_size,
     int vocab_size_padded,
     int step
@@ -95,11 +95,10 @@ void cpuInvokeRepetitionPenalty(
     int vocab_size_padded,
     int step,
     const RepetitionPenaltyType repetition_penalty_type,
-    float repetition_penalty // 重复惩罚系数，用于降低已经生成过的词的概率
+    float repetition_penalty    // 重复惩罚系数，用于降低已经生成过的词的概率
 )
 {
     for (int batch_idx = 0; batch_idx < batch_size; batch_idx++) {
-        // 获取当前对应的输入长度
         const int input_length = (input_lengths != nullptr) ? input_lengths[batch_idx] : max_input_length;
         float repet_penalty = static_cast<float>(repetition_penalty);
 
@@ -163,17 +162,16 @@ void cpuInvokeAddBiasEndMask(
         for (int vocab_idx = 0; vocab_idx < vocab_size_padded; vocab_idx++) {
             if (vocab_idx < vocab_size) {
                 if (finish) {
-                    logits[offset + vocab_idx] = (vocab_idx == end_ids[batch_idx]) ? FLT_MAX : -FLT_MAX;
+                    logits[offset + vocab_idx] = (vocab_idx == end_ids[batch_idx]) ? FLT_MAX : -INFINITY;
                 }
                 else {
-                    // possible wrong
                     float bias_val = (bias != nullptr) ? bias[batch_idx] : (float)0.0f;
                     logits[offset + vocab_idx] += bias_val;
                 }
             }
             // padded part
             else {
-                logits[offset + vocab_idx] = -FLT_MAX;
+                logits[offset + vocab_idx] = -INFINITY;
             }
         }
     }
@@ -298,40 +296,35 @@ void cpuInvokeBatchTopKSampling(
             }
         }
 
-        // --- CHECK ---
+        // --------------------- CHECK ---------------------
         // for (int i = 0; i < vocab_size_padded; i++) {
         //     std::cout << topk_vals[i] << " ";
         // }
         // std::cout << std::endl;
-        // -------------
+        // -------------------------------------------------
 
         // Step 3: Softmax 处理并归一化
         // 在 Top-k 采样的代码中，归一化是隐含在随机数采样过程中完成的
-        float s_sum = 0.0f;          // 表示 topk 选择的概率和
+        float s_sum = 0.0f;                                                    // 表示 topk 选择的概率和
         for (int i = 0; i < k; ++i) {
         // when cum_log_probs are computed, topk_vals (logits_buf_) are already pre-processed by softmax_kernel
             if (cum_log_probs == nullptr && output_log_probs == nullptr) {
-                topk_vals[i] = expf(topk_vals[i] - s_max);              // Numerically stable softmax
+                topk_vals[i] = expf(topk_vals[i] - s_max);                  // Numerically stable softmax
             }
             s_sum += topk_vals[i];
         }
-
         // std::cout << s_sum << std::endl;
 
         // Step 4: 生成随机数，进行 Top-k 采样
+        // float rand_num = 0.8 * prob_threshold * s_sum;
         float rand_num = rand_float() * prob_threshold * s_sum;
-        
         // std::cout << rand_num << std::endl;
-
         // 通过逐渐减去概率值直到随机数 rand_num 变为负数时停止，实现了概率分布下的采样
         for (int i = 0; i < k; i++){
             rand_num -= topk_vals[i];
             if (rand_num <= 0.0f || i == k - 1) {
-                
                 // std::cout << "topk:" << topk_vals[i] << std::endl;
-
                 ids[batch_id] = topk_indices[i];
-                
                 // 计算累积 log 概率 输出 log 概率
                 if (cum_log_probs != NULL || output_log_probs != NULL) {
                     float log_prob = logf(topk_vals[i]);
@@ -346,9 +339,7 @@ void cpuInvokeBatchTopKSampling(
                 break;
             }
         }
-
-        // std::cout << " - " << cum_log_probs[batch_id] << " " << output_log_probs[batch_id] << std::endl;
-
+        // std::cout  << cum_log_probs[batch_id] << " " << output_log_probs[batch_id] << std::endl;
         // Step 5: 更新序列长度和 finished 状态
         if (sequence_lengths != NULL && finished != NULL) {
             sequence_lengths[batch_id] = finished[batch_id] ? sequence_lengths[batch_id] : sequence_lengths[batch_id] + 1;
@@ -375,7 +366,6 @@ void cpuInvokeStopWordsCriterion(
                 const int item_end = base_offsets[id];
                 const int item_start = (id > 0) ? base_offsets[id - 1] : 0;
                 const int item_size = item_end - item_start;
-
                 bool should_stop = false;
                 if (step + 1 >= item_size) {
                     should_stop = true;
@@ -393,7 +383,6 @@ void cpuInvokeStopWordsCriterion(
             }
     }
 }
-
 
 void cpuInvokeLengthCriterion(
     bool* finished,
@@ -413,7 +402,7 @@ void cpuInvokeLengthCriterion(
 }
 
 
-// CHECK
+// PRINT
 void print_logits(float* logits, int len, std::string name) {
     std::cout << std::left << std::setw(25) << std::setfill(' ') << name;
     for (int i=0; i < len; i++) {
@@ -431,13 +420,11 @@ void print(T* input, int len, std::string name) {
     std::cout << std::endl;
 }
 
-
-
 // ALL BATCH COMPETE
 void cpuCustomTransformerDynamicDecoder(
 
     float* logits,                      // [batch_size * vocab_size_padded]      vocab logits
-    int* output_ids,                    // [batch_size * sequence_limit_length]
+    int* output_ids,                    // [batch_size * sequence_limit_length.max()]
         
     int step,                           // [1]                     解码过程的 step 从 max_input_length 开始递增，step 每自增1，代表解码一次
     int batch_size,                     // [1]
@@ -446,8 +433,8 @@ void cpuCustomTransformerDynamicDecoder(
     int *end_ids,                       // [batch_size]            结束词 id
     
     bool share_words,                   // [1]                     bad_word 是否不同 batch 之间共享
-    int* bad_words_list,                // [bad_words_len * 2]     bad_words
-    int bad_words_len,                  // bad_words 的总长度
+    int* bad_words_list,                // [(batch_size) * bad_words_len * 2]     坏词列表  (当 share_words 为 true, 则不需要乘 batch_size)
+    int bad_words_len,                  // [1]                     坏词的总长度 （单 batch）
     
     float* embedding_bias,              // [vocab_size]            bias
     float* temperature,                 // [1] or [batch_size]     mul
@@ -468,8 +455,8 @@ void cpuCustomTransformerDynamicDecoder(
     float* cum_log_probs,               // [batch_size]            累积对数概率
     float* output_log_probs,            // [batch_size * (sequence_limit_length - max_input_length)]     所选 token 相对 Top-k 集的概率 
 
-    int stop_words_len,                 // [1]                     停用词总长度
-    int* stop_words_list,               // [stop_words_len * 2]    停用词列表
+    int stop_words_len,                 // [1]                     停用词总长度（单 batch）
+    int* stop_words_list,               // [batch_size * stop_words_len * 2]      停用词列表
     
     bool* finished,                     // [batch_size]            指示该 batch 是否结束
     int* finished_sum,                  // [1]                     结束 batch 的个数和
@@ -478,7 +465,7 @@ void cpuCustomTransformerDynamicDecoder(
     bool* skip_decode                   // [batch_size]            batch 是否跳过 decoder
 ){
 
-    print_logits(logits, vocab_size_padded, "INPUT");
+    print_logits(logits, vocab_size_padded * batch_size, "INPUT");
 
     if (bad_words_list != nullptr){
         cpuInvokeBanBadWords(
@@ -493,8 +480,7 @@ void cpuCustomTransformerDynamicDecoder(
         );
     }
 
-    print_logits(logits, vocab_size_padded, "AFTER BanWords");
-
+    print_logits(logits, vocab_size_padded * batch_size, "AFTER BanWords");
 
     if (embedding_bias != nullptr || temperature != nullptr){
         cpuInvokeTemperaturePenalty(
@@ -508,7 +494,7 @@ void cpuCustomTransformerDynamicDecoder(
         );
     }
 
-    print_logits(logits, vocab_size_padded, "AFTER Temperature");
+    print_logits(logits, vocab_size_padded * batch_size, "AFTER Temperature");
 
     if (step > 0 && penalty_type != RepetitionPenaltyType::None) {
         cpuInvokeRepetitionPenalty(
@@ -525,7 +511,7 @@ void cpuCustomTransformerDynamicDecoder(
         );
     }
 
-    print_logits(logits, vocab_size_padded, "AFTER Repetition");
+    print_logits(logits, vocab_size_padded * batch_size, "AFTER Repetition");
 
     if (step - max_input_length < min_length) {
         cpuInvokeMinLengthPenalty(
@@ -539,7 +525,7 @@ void cpuCustomTransformerDynamicDecoder(
         );
     }
 
-    print_logits(logits, vocab_size_padded, "AFTER MinLength");
+    print_logits(logits, vocab_size_padded * batch_size, "AFTER MinLength");
 
     cpuInvokeAddBiasEndMask(
         logits,
@@ -551,7 +537,7 @@ void cpuCustomTransformerDynamicDecoder(
         vocab_size_padded
     );
 
-    print_logits(logits, vocab_size_padded, "AFTER AddBiasEndMask");
+    print_logits(logits, vocab_size_padded * batch_size, "AFTER AddBiasEndMask");
 
     if (cum_log_probs != nullptr || output_log_probs != nullptr) {
         cpuInvokeAddBiasSoftMax(
@@ -564,7 +550,7 @@ void cpuCustomTransformerDynamicDecoder(
             vocab_size_padded
         );
 
-        print_logits(logits, vocab_size_padded, "AFTER AddBiasSoftMax");
+        print_logits(logits, vocab_size_padded * batch_size, "AFTER AddBiasSoftMax");
     }
     
     cpuInvokeBatchTopKSampling(
@@ -584,9 +570,8 @@ void cpuCustomTransformerDynamicDecoder(
         skip_decode
     );
 
-
-    print_logits(logits, vocab_size_padded, "AFTER TopKSampling");
-    print(output_ids, step+1, "ouput_ids");
+    print_logits(logits, vocab_size_padded * batch_size, "AFTER TopKSampling");
+    print(output_ids, (step+1) * batch_size, "ouput_ids");
     print(finished, batch_size, "finished_1");
 
     if (stop_words_list != nullptr){
@@ -599,9 +584,9 @@ void cpuCustomTransformerDynamicDecoder(
             step
         );
     }
+
     print(finished, batch_size, "finished_2");
     print(should_stop, 1, "should_stop1");
-
 
     if (sequence_lengths != nullptr){
         cpuInvokeLengthCriterion(
@@ -613,18 +598,16 @@ void cpuCustomTransformerDynamicDecoder(
             step
         );
     }
+
     print(should_stop, 1, "should_stop1");
 }
 
-
-
 int main(){
-    // 1. 定义常量
-    int batch_size = 1;                
-    int vocab_size = 5;          
+    int batch_size = 2;                
+    int vocab_size = 3;          
     int vocab_size_padded = 5;
     int max_input_length = 4;
-    int end_ids[] = {4}; 
+    int end_ids[] = {4, 4}; 
     bool share_words = true; 
     int bad_words_list[] = {1, 2, 2, -1};
     int bad_words_len = 1;
@@ -635,29 +618,28 @@ int main(){
     RepetitionPenaltyType penalty_type = RepetitionPenaltyType::Additive; 
     int min_length = 3;
     int max_top_k = 3;
-    int top_ks[] = {2};
+    int top_ks[] = {2, 2};
     float top_p = 0.9;
-    float top_ps[] = {0.8};
-    int stop_words_list[] = {0, 1};
+    float top_ps[] = {0.8, 0.8};
+    int stop_words_list[] = {0, 1, 0, 1};
     int stop_words_len = 1;
     
-    // 2. 输入数据初始化
-    float logits[1][5] = {
-        {0.2, 0.5, 0.1, 0.15, 0.05}
+    float logits[2][5] = {
+        0.2, 0.5, 0.1, 0.15, 0.05,
+        0.2, 0.5, 0.1, 0.15, 0.05
     };
-    int output_ids[10] = {2, 1, 3, 1};
+    int output_ids[10] = {2, 2, 1, 1, 3, 3, 1, 1};
     int step = max_input_length;
-    int sequence_lengths[1] = {max_input_length};
-    int sequence_limit_length[1] = {10};
-    int input_length[1] = {max_input_length};
-    bool finished[1] = {false};
+    int sequence_lengths[2] = {max_input_length, max_input_length};
+    int sequence_limit_length[2] = {10, 10};
+    int input_length[2] = {max_input_length, max_input_length};
+    bool finished[2] = {false, false};
     int finished_sum[1] = {0};
     bool should_stop[1] = {false};
-    bool skip_decode[1] = {false};
-    float cum_log_probs[1] = {0.0};
-    float output_log_probs[10];
+    bool skip_decode[2] = {false, false};
+    float cum_log_probs[2] = {0.0, 0.0};
+    float output_log_probs[20];
 
-    // 3. 调用函数
     cpuCustomTransformerDynamicDecoder(
         &logits[0][0],
         output_ids,
@@ -693,5 +675,5 @@ int main(){
         skip_decode
     );
     
-        return 0;
+    return 0;
 }

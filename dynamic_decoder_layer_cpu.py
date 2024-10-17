@@ -54,13 +54,12 @@ def cpu_invoke_temperature_penalty(logits, bias, temperatures, temperatures_size
 
 def cpu_invoke_repetition_penalty(logits, output_ids, input_lengths, max_input_length, batch_size, vocab_size, vocab_size_padded, step, repetition_penalty_type, repetition_penalty):
     for batch_idx in range(batch_size):
-        # 获取当前对应的输入长度
         input_length = input_lengths[batch_idx] if input_lengths is not None else max_input_length
         repet_penalty = float(repetition_penalty)
 
         offset = batch_idx * vocab_size_padded
         for i in range(step - 1, -1, -1):
-            # input pad 的部分
+            # ignore input paded
             if input_length <= i < max_input_length:
                 continue
             
@@ -175,19 +174,19 @@ def cpu_invoke_batch_topk_sampling(
         # Sort the first k elements
         bubble_sort_topk(topk_vals, topk_indices, vocab_size_padded, k)
 
-        # Step 2: Softmax 前处理，找到最大值
+        # Step 2: Find max value for softmax pre-processing
         s_max = -np.inf
         if cum_log_probs is None and output_log_probs is None:
             s_max = max(topk_vals[:k])
 
-        # Step 3: Softmax 处理并归一化
-        s_sum = 0.0
+        # Step 3: Softmax and normalize
+        s_sum = 0.0  # Sum of top-k probabilities
         for i in range(k):
             if cum_log_probs is None and output_log_probs is None:
-                topk_vals[i] = np.exp(topk_vals[i] - s_max)       # Numerically stable softmax
+                topk_vals[i] = np.exp(topk_vals[i] - s_max)  # Numerically stable softmax
             s_sum += topk_vals[i]
 
-        # Step 4: 生成随机数，进行 Top-k 采样
+        # Step 4: Generate random number and perform Top-k sampling
         rand_num = rand_float() * prob_threshold * s_sum
         # rand_num = 0.8 * prob_threshold * s_sum
         
@@ -196,7 +195,7 @@ def cpu_invoke_batch_topk_sampling(
             if rand_num <= 0.0 or i == k - 1:
                 ids[batch_id] = topk_indices[i]
                 
-                # 计算累积 log 概率 输出 log 概率
+                # Compute cumulative log probabilities and output log probabilities
                 if cum_log_probs is not None or output_log_probs is not None:
                     log_prob = np.log(topk_vals[i])
                     if cum_log_probs is not None:
@@ -205,7 +204,7 @@ def cpu_invoke_batch_topk_sampling(
                         output_log_probs[batch_id] = log_prob - np.log(s_sum)
                 break
 
-        # Step 5: 更新序列长度和 finished 状态
+        # Step 5: Update sequence lengths and finished status
         if sequence_lengths is not None and finished is not None:
             sequence_lengths[batch_id] = sequence_lengths[batch_id] + (0 if finished[batch_id] else 1)
             finished[batch_id] = (ids[batch_id] == end_ids[batch_id])
@@ -248,7 +247,7 @@ def cpu_invoke_length_criterion(finished, should_stop, finished_sum, sequence_li
 def print_logits(logits, name):
     print(f"{name:<25}", end="")
     for logit in logits:
-        print(f"{logit:<20}", end=" ")
+        print(f"{logit:<10.4f}", end=" ")  # 保留两位小数
     print()
 
 def print_array(input_array, name):
@@ -258,15 +257,15 @@ def print_array(input_array, name):
     print()
     
 def cpu_custom_transformer_dynamic_decoder(
-    logits,                       # [batch_size * vocab_size_padded]
-    output_ids,                  # [batch_size * sequence_limit_length]
+    logits,                      # [batch_size * vocab_size_padded]
+    output_ids,                  # [batch_size * sequence_limit_length.max()]
     step,                        # [1]
     batch_size,                  # [1]
     vocab_size,                  # [1]
     vocab_size_padded,           # [1]
     end_ids,                     # [batch_size]
     share_words,                 # [1]
-    bad_words_list,              # [bad_words_len * 2]
+    bad_words_list,              # [batch_size * bad_words_len * 2]
     bad_words_len,               # [1]
     embedding_bias,              # [vocab_size]
     temperature,                 # [1] or [batch_size]
@@ -285,7 +284,7 @@ def cpu_custom_transformer_dynamic_decoder(
     cum_log_probs,               # [batch_size]
     output_log_probs,            # [batch_size * (sequence_limit_length - max_input_length)]
     stop_words_len,              # [1]
-    stop_words_list,             # [stop_words_len * 2]
+    stop_words_list,             # [batch_size * stop_words_len * 2]
     finished,                    # [batch_size]
     finished_sum,                # [1]
     should_stop,                 # [1]
@@ -422,12 +421,11 @@ def cpu_custom_transformer_dynamic_decoder(
     print_array(should_stop, "should_stop2")
     
 def main():
-    # 1. 定义常量
-    batch_size = 1
+    batch_size = 2
     vocab_size = 5
     vocab_size_padded = 5
     max_input_length = 4
-    end_ids = np.array([4])
+    end_ids = np.array([4, 4])
     share_words = True
     bad_words_list = np.array([1, 2, 2, -1])
     bad_words_len = 1
@@ -438,28 +436,26 @@ def main():
     penalty_type = RepetitionPenaltyType.ADDITIVE
     min_length = 3
     max_top_k = 3
-    top_ks = np.array([2])
+    top_ks = np.array([2, 2])
     top_p = 0.9
-    top_ps = np.array([0.8])
-    stop_words_list = np.array([0, 1])
+    top_ps = np.array([0.8, 0.8])
+    stop_words_list = np.array([0, 1, 0, 1])
     stop_words_len = 1
 
-    # 2. 输入数据初始化
-    logits = np.array([[0.2, 0.5, 0.1, 0.15, 0.05]], dtype=np.float32)
+    logits = np.array([[0.2, 0.5, 0.1, 0.15, 0.05],[0.2, 0.5, 0.1, 0.15, 0.05]], dtype=np.float32)
     step = max_input_length
-    sequence_lengths = np.array([max_input_length])
-    sequence_limit_length = np.array([10])
-    output_ids = np.zeros(sequence_limit_length * batch_size, dtype=int)
-    output_ids[:4] = [2, 1, 3, 1] 
-    input_length = np.array([max_input_length])
-    finished = np.array([False])
+    sequence_lengths = np.array([max_input_length, max_input_length])
+    sequence_limit_length = np.array([10, 10])
+    output_ids = np.zeros(sequence_limit_length.max() * batch_size, dtype=int)
+    output_ids[:8] = [2, 2, 1, 1, 3, 3, 1, 1] 
+    input_length = np.array([max_input_length, max_input_length])
+    finished = np.array([False, False])
     finished_sum = np.array([0])
     should_stop = np.array([False])
-    skip_decode = np.array([False])
-    cum_log_probs = np.array([0.0], dtype=np.float32)
-    output_log_probs = np.zeros(10, dtype=np.float32)
+    skip_decode = np.array([False, False])
+    cum_log_probs = np.array([0.0, 0,0], dtype=np.float32)
+    output_log_probs = np.zeros(20, dtype=np.float32)
 
-    # 3. 调用函数
     cpu_custom_transformer_dynamic_decoder(
         logits.flatten(),
         output_ids,
