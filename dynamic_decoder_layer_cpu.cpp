@@ -453,7 +453,7 @@ void cpuCustomTransformerDynamicDecoder(
     float top_p,                        // [1]                     top_p
     float* top_ps,                      // [batch_size]            each batch p
     float* cum_log_probs,               // [batch_size]            累积对数概率
-    float* output_log_probs,            // [batch_size * (sequence_limit_length - max_input_length)]     所选 token 相对 Top-k 集的概率 
+    float* output_log_probs,            // [batch_size * (sequence_limit_length.max() - max_input_length)]     所选 token 相对 Top-k 集的概率 
 
     int stop_words_len,                 // [1]                     停用词总长度（单 batch）
     int* stop_words_list,               // [batch_size * stop_words_len * 2]      停用词列表
@@ -641,7 +641,7 @@ int main(){
     float output_log_probs[20];
 
     cpuCustomTransformerDynamicDecoder(
-        &logits[0][0],
+&logits[0][0],
         output_ids,
         step,
         batch_size,
