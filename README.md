@@ -5,3 +5,17 @@
 from: https://github.com/NVIDIA/FasterTransformer 
 
 <img src="./pictures/dynamic_decoder.png" alt="alt text" style="width: 90%; height: auto;">
+
+
+### 编译运行
+
+cpp:
+```sh
+g++ dynamic_decoder_layer_cpu.cpp -o dynamic_decoder_layer_cpu
+./dynamic_decoder_layer_cpu
+```
+
+python:
+```sh
+python dynamic_decoder_layer_cpu.py
+```
